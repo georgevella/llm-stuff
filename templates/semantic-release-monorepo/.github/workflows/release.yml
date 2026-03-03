@@ -1,0 +1,94 @@
+on:
+  push:
+    branches:
+      - master
+      - next
+      - next-major
+      - beta
+      - alpha
+      - '[0-9]+.x'
+      - '[0-9]+.[0-9]+.x'
+
+jobs:
+  detect-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      app: ${{ steps.changes.outputs.app }}
+      helm: ${{ steps.changes.outputs.helm }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - uses: dorny/paths-filter@v3
+        id: changes
+        with:
+          filters: |
+            app:
+              - 'src/**'
+              - 'Dockerfile'
+              - 'scripts/prepare.sh'
+              - 'scripts/publish.sh'
+              - '.releaserc.app.json'
+            helm:
+              - 'helm/**'
+              - 'scripts/helm-prepare.sh'
+              - 'scripts/helm-publish.sh'
+              - '.releaserc.helm.json'
+
+  release-app:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.app == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - uses: docker/setup-buildx-action@v3
+
+      - run: npm ci
+
+      - name: Semantic release (app)
+        run: ./node_modules/.bin/semantic-release --extends ./.releaserc.yaml --extends ./.releaserc.app.json
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REGISTRY: ${{ secrets.APP_REGISTRY }}
+          REPOSITORY: ${{ secrets.APP_REPOSITORY }}
+
+  release-helm:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.helm == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - uses: azure/setup-helm@v4.3.0
+
+      - run: npm ci
+
+      - name: Semantic release (helm)
+        run: ./node_modules/.bin/semantic-release --extends ./.releaserc.yaml --extends ./.releaserc.helm.json
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          HELM_USERNAME: ${{ secrets.HELM_USERNAME }}
+          HELM_PASSWORD: ${{ secrets.HELM_PASSWORD }}
+          HELM_REPOSITORY: ${{ secrets.HELM_REPOSITORY }}

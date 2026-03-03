@@ -1,0 +1,113 @@
+skill_id: semantic-release-monorepo
+version: 1
+
+defaults:
+  base_config_file: .releaserc.yaml
+  branch_policy:
+    - '+([0-9])?(.{+([0-9]),x}).x'
+    - master
+    - next
+    - next-major
+    - name: beta
+      prerelease: true
+    - name: alpha
+      prerelease: true
+  ci_node_version: 22
+  checkout_fetch_depth: 0
+  requires_full_history_for_release: true
+  pre_release_mode: enabled
+
+publishables:
+  - id: app
+    config_file: .releaserc.app.json
+    tag_format: v${version}
+    prepare_cmd: ./scripts/prepare.sh ${nextRelease.version}
+    publish_cmd: ./scripts/publish.sh ${nextRelease.version}
+    success_cmd: echo ${nextRelease.version} > ./output/.version
+    changelog_file: artifacts/CHANGELOG.md
+    artifact_glob: artifacts/*.*
+    path_filters:
+      - src/**/*.cs
+      - src/**/*.csproj
+      - Dockerfile
+    credentials:
+      - GH_TOKEN
+      - AWS_REGISTRY
+      - AWS_REPOSITORY
+
+  - id: helm
+    config_file: .releaserc.helm.json
+    tag_format: helm-v${version}
+    prepare_cmd: ./scripts/helm-prepare.sh ${nextRelease.version}
+    publish_cmd: ./scripts/helm-publish.sh ${nextRelease.version}
+    success_cmd: echo ${nextRelease.version} > ./output/.version
+    changelog_file: artifacts/CHANGELOG.md
+    artifact_glob: artifacts/*.*
+    path_filters:
+      - helm/**
+    credentials:
+      - GH_TOKEN
+      - HELM_USERNAME
+      - HELM_PASSWORD
+      - HELM_REPOSITORY
+
+parameters_required_for_new_repo:
+  - publishables[*].id
+  - publishables[*].config_file
+  - publishables[*].tag_format
+  - publishables[*].prepare_cmd
+  - publishables[*].publish_cmd
+  - publishables[*].path_filters
+  - publishables[*].credentials
+  - workflow_file
+  - release_branches
+
+inconsistency_parameters:
+  - name: app_publish_argument_mode
+    description: Whether app publish script expects only version or target+version.
+    allowed_values: [version_only, target_and_version]
+    recommended: version_only
+  - name: changelog_path_mode
+    description: Shared artifacts changelog vs publishable-specific changelog location.
+    allowed_values: [shared_artifacts_root, per_publishable_subdir]
+    recommended: per_publishable_subdir
+  - name: workflow_release_branches
+    description: Branches that trigger release workflow (must align with semantic-release branch policy).
+    allowed_values: [stable_only, stable_and_alpha, full_policy]
+    recommended: full_policy
+  - name: checkout_fetch_depth_mode
+    description: Git checkout depth for release jobs.
+    allowed_values: [2, 0]
+    recommended: 0
+  - name: actions_checkout_version_mode
+    description: Keep checkout action major version consistent.
+    allowed_values: [v4, v6]
+    recommended: v4
+  - name: setup_tools_strategy
+    description: Tooling install strategy for release jobs (yq/helm/buildx/etc).
+    allowed_values: [minimal_per_job, fully_explicit_per_job]
+    recommended: fully_explicit_per_job
+  - name: docs_config_filename_style
+    description: Whether docs reference json or yaml release config files.
+    allowed_values: [json, yaml]
+    recommended: json
+
+repository_observations:
+  service_essentials_operator:
+    strengths:
+      - robust shared branch policy file
+      - publishable-specific tag namespaces
+      - exec-based extensibility
+    gaps:
+      - missing committed workflow orchestration
+      - app publish command/script argument mismatch
+      - helm publish scripts are placeholders
+  opensearch_serverless_proxy:
+    strengths:
+      - committed workflow with path-based release gating
+      - script argument contracts aligned for version-only publish
+      - non-placeholder helm publish implementation
+    gaps:
+      - workflow trigger branches narrower than semantic-release policy
+      - mixed checkout action major versions and shallow checkout for change detection
+      - docs mention *.yaml config names while repo uses *.json
