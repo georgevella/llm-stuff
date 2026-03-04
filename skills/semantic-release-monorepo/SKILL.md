@@ -1,3 +1,8 @@
+---
+name: semantic-release-monorepo
+description: Standardize and automate semantic-release for monorepos with multiple publishables and independent version streams.
+---
+
 # Skill: semantic-release-monorepo
 
 ## Purpose
